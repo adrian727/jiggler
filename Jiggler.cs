@@ -6,88 +6,65 @@ using System.Threading;
 
 public class MouseJiggler : Form
 {
+    // P/Invoke - Importing the native Windows function that simulates actual input
+    [DllImport("user32.dll")]
+    static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, int dwExtraInfo);
+
+    // Flag to tell Windows we are moving the mouse
+    private const uint MOUSEEVENTF_MOVE = 0x0001;
+
     private NotifyIcon trayIcon;
     private ContextMenu trayMenu;
     private System.Windows.Forms.Timer moveTimer;
-    private Point lastPosition;
-    private DateTime lastMoveTime;
-
-    // Import Windows API to move mouse physically
-    [DllImport("user32.dll")]
-    static extern bool SetCursorPos(int X, int Y);
-
-    [DllImport("user32.dll")]
-    static extern bool GetCursorPos(out Point lpPoint);
-
-    // Single Instance Mutex
-    private static Mutex mutex = null;
 
     public MouseJiggler()
     {
-        // 1. Setup System Tray
+        // --- 1. Setup System Tray ---
         trayMenu = new ContextMenu();
         trayMenu.MenuItems.Add("Exit", OnExit);
 
         trayIcon = new NotifyIcon();
-        trayIcon.Text = "Mouse Jiggler";
-
-        // Create a simple icon on the fly (Red Circle) so you don't need an external .ico file
+        trayIcon.Text = "Jiggler v2 (Active)";
         trayIcon.Icon = CreateSimpleIcon();
-
         trayIcon.ContextMenu = trayMenu;
         trayIcon.Visible = true;
 
-        // 2. Setup Timer (Checks every 30 seconds)
+        // --- 2. Setup Timer (Runs every 60 seconds) ---
         moveTimer = new System.Windows.Forms.Timer();
-        moveTimer.Interval = 30000; // 30 seconds
-        moveTimer.Tick += new EventHandler(CheckActivity);
+        moveTimer.Interval = 60000; // 60 seconds
+        moveTimer.Tick += new EventHandler(DoJiggle);
         moveTimer.Start();
-
-        // Initialize tracking
-        GetCursorPos(out lastPosition);
-        lastMoveTime = DateTime.Now;
     }
 
-    private void CheckActivity(object sender, EventArgs e)
+    private void DoJiggle(object sender, EventArgs e)
     {
-        Point currentPos;
-        GetCursorPos(out currentPos);
+        // 1. Move Mouse Right by 1 pixel (Relative move)
+        // This generates a hardware-level input event
+        mouse_event(MOUSEEVENTF_MOVE, 1, 0, 0, 0);
+        
+        // 2. Wait 100ms so the OS definitely sees it
+        Thread.Sleep(100);
 
-        // If mouse has moved since last check
-        if (currentPos != lastPosition)
-        {
-            lastPosition = currentPos;
-            lastMoveTime = DateTime.Now;
-        }
-        else
-        {
-            // No movement detected
-            // Jiggle the mouse: Move 1 pixel right, then back
-            SetCursorPos(currentPos.X + 1, currentPos.Y);
-            System.Threading.Thread.Sleep(50);
-            SetCursorPos(currentPos.X, currentPos.Y);
-
-            // Log acts as "keep alive"
-            lastMoveTime = DateTime.Now;
-        }
+        // 3. Move Mouse Left by 1 pixel (Back to start)
+        mouse_event(MOUSEEVENTF_MOVE, -1, 0, 0, 0);
     }
 
     private Icon CreateSimpleIcon()
     {
-        // Draw a 16x16 red circle to use as an icon
+        // Create a Green Square icon this time to indicate v2
         Bitmap bitmap = new Bitmap(16, 16);
         using (Graphics g = Graphics.FromImage(bitmap))
         {
             g.Clear(Color.Transparent);
-            g.FillEllipse(Brushes.Red, 1, 1, 14, 14);
+            g.FillRectangle(Brushes.Green, 2, 2, 12, 12);
         }
         return Icon.FromHandle(bitmap.GetHicon());
     }
 
     protected override void OnLoad(EventArgs e)
     {
-        Visible = false; // Hide the form window
-        ShowInTaskbar = false; // Remove from taskbar
+        Visible = false;       // Hide the window
+        ShowInTaskbar = false; // Hide from taskbar
         base.OnLoad(e);
     }
 
@@ -100,17 +77,15 @@ public class MouseJiggler : Form
     [STAThread]
     public static void Main()
     {
-        const string appName = "com.example.MouseJiggler";
+        // Single Instance Check (Mutex)
         bool createdNew;
-
-        mutex = new Mutex(true, appName, out createdNew);
-
-        if (!createdNew)
+        using (Mutex mutex = new Mutex(true, "Global\\MyJigglerAppV2", out createdNew))
         {
-            // App is already running
-            return;
+            if (createdNew)
+            {
+                Application.Run(new MouseJiggler());
+            }
+            // If not createdNew, app closes silently (already running)
         }
-
-        Application.Run(new MouseJiggler());
     }
 }
