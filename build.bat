@@ -1,0 +1,1 @@
+csc /target:winexe /out:Jiggler.exe Jiggler.cs
