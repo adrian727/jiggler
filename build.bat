@@ -1,1 +1,1 @@
-csc /target:winexe /out:Jiggler.exe Jiggler.cs
+csc /target:winexe /out:Insomnia.exe Insomnia.cs
